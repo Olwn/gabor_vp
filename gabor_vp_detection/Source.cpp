@@ -14,6 +14,12 @@
 using namespace cv;
 using namespace std;
 #define PI 3.141592653f
+struct vals{
+	float arc;
+	float d;
+};
+vals arcMatrix[200][400];
+Mat oddKernels[36], evenKernels[36];
 
 void myGaborKernel(float theta, Mat &oddKernel, Mat &evenKernel)
 {
@@ -21,6 +27,8 @@ void myGaborKernel(float theta, Mat &oddKernel, Mat &evenKernel)
 	int size_kernel = 17;
 	float sigma = (float)size_kernel / 9.0f;
 	int k = (size_kernel - 1) / 2;
+	oddKernel.create(size_kernel, size_kernel, CV_32F);
+	evenKernel.create(size_kernel, size_kernel, CV_32F);
 	for (int x = -1 * k; x <= k; x++)
 		for (int y = -1 * k; y <= k; y++)
 		{
@@ -129,35 +137,26 @@ Mat computeVpScore(string filePath)
 	Mat image(img_gray.rows * scale_factor, width, CV_32F);
 	resize(img_float, image, image.size());
 	int m = image.rows, n = image.cols;
-	cout << m << ' ' << n << endl;
+	
 	Mat scores(m, n, CV_32F);
 	float ***gabors = new float**[m];
 	for_each(gabors, gabors+m, [n](float** &x){x = new float*[n]; });
 	for_each(gabors, gabors+m, [n, n_theta](float** x){for_each(x, x+n, [&, n_theta](float* &y){ y = new float[n_theta]; }); });
-	//cout << image;
-	waitKey(100000);
-	namedWindow("g");
-	namedWindow("o");
-	namedWindow("e");
+	
+	Mat filtered(image.rows, image.cols, CV_32F), oddfiltered(image.rows, image.cols, CV_32F), evenfiltered(image.rows, image.cols, CV_32F);
 	for (int t = 0; t < n_theta; t++)
 	{	
-		float theta = PI*(float)t / (float)n_theta;
-		Mat oddKernel(17, 17, CV_32F), evenKernel(17, 17, CV_32F);
-		myGaborKernel(theta, oddKernel, evenKernel);
-		Mat filtered(image.rows, image.cols, CV_32F), oddfiltered(image.rows, image.cols, CV_32F), evenfiltered(image.rows, image.cols, CV_32F);
-		filter2D(image, oddfiltered, -1, oddKernel);
-		filter2D(image, evenfiltered, -1, evenKernel);
+		filter2D(image, oddfiltered, -1, oddKernels[t]);
+		filter2D(image, evenfiltered, -1, evenKernels[t]);
 
 		for (int i = 0; i < m; i++)
 			for (int j = 0; j < n; j++)
 				filtered.at<float>(i, j) = pow(oddfiltered.at<float>(i, j), 2.0f) + pow(evenfiltered.at<float>(i, j), 2.0f);
-				//filtered.at<float>(i, j) = oddfiltered.at<float>(i, j) + evenfiltered.at<float>(i, j);
 		
 		for (int i = 0; i < m; i++)
 			for (int j = 0; j < n; j++)
 				gabors[i][j][t] = filtered.at<float>(i, j);
 	}
-	destroyAllWindows();
 	
 	Mat directions(image.rows, image.cols, CV_8U);
 	Mat confidences(image.rows, image.cols, CV_32F);
@@ -168,16 +167,15 @@ Mat computeVpScore(string filePath)
 
 			int idx = (float)(max_element(gabors[i][j], gabors[i][j] + n_theta) - gabors[i][j]);
 			directions.at<uchar>(i, j) = (uchar)idx;
-			float max_resp = gabors[i][j][idx];
-			sort(gabors[i][j], gabors[i][j] + n_theta, greater<float>());
+			//float max_resp = gabors[i][j][idx];
+			/*sort(gabors[i][j], gabors[i][j] + n_theta, greater<float>());
 			if (max_resp > 0.5f)
 				confidences.at<float>(i, j) = (1 - accumulate(gabors[i][j] + 4, gabors[i][j] + 15, 0.0f) / 11.0f / max_resp);
 			else
-				confidences.at<float>(i, j) = 0;
+				confidences.at<float>(i, j) = 0;*/
 		}
 	
-	float thresh = 2.0f * 180.0f / (float)n_theta;
-	std::cout << thresh << endl;
+	int thresh = 2.0f * 180.0f / (float)n_theta;
 	int r = (m + n) / 7;
 	float r_dia = sqrtf(m*m + n*n);
 	for (int i = 0; i < m; i++)
@@ -185,21 +183,27 @@ Mat computeVpScore(string filePath)
 		for (int j = 0; j < n; j++)
 		{
 			scores.at<float>(i, j) = 0;
+			float tmepScore = 0;
 			for (int i1=i+1; i1 < m && i1<i+40; i1++)
 			{
 				for (int j1=0; j1 < n; j1++)
 				{
-					float c = (float)directions.at<uchar>(i1, j1) / (float)n_theta * 180;
-					if (c < 5.0f || (85.0f < c && c < 95.0f) || c>175.0f)
-						continue;
-					float d = sqrtf(pow(i - i1, 2.0) + pow(j - j1, 2.0));
-					float gamma = acosf(((float)j - (float)j1) / d)/ PI * 180.0f;					
-					if (abs(c - gamma) < thresh && confidences.at<float>(i1, j1) > 0.35)
+					int c = (float)directions.at<uchar>(i1, j1) / (float)n_theta * 180.0f;
+					/*if (c < 5.0f || (85.0f < c && c < 95.0f) || c>175.0f)
+						continue;*/
+					//float d = sqrtf(pow(i - i1, 2.0) + pow(j - j1, 2.0));
+					//float d = arcMatrix[i1-i][j1-j+200].d;
+					//float gamma = acosf(((float)j - (float)j1) / d)/ PI * 180.0f;					
+					int gamma = arcMatrix[i1-i][j1-j+200].arc;
+					
+					if (abs(c - gamma) < thresh/* && confidences.at<float>(i1, j1) > 0.35*/)
 					{
-						scores.at<float>(i, j) = scores.at<float>(i, j) + 1 / (1 + pow(c - gamma, 2.0f)*pow(d / r_dia, 2.0));
+						//tmepScore += 1 / (1 + pow(c - gamma, 2.0f)*pow(d / r_dia, 2.0));
+						tmepScore += 1;
 					}	
 				}
 			}
+			scores.at<float>(i, j) = tmepScore;
 		}
 	}
 
@@ -227,6 +231,24 @@ Mat computeVpScore(string filePath)
 
 int main()
 {
+	for (int j = 0; j < 200; j++)
+	{
+		for (int i = 0; i < 400; i++)
+		{
+			float t1 = sqrtf(pow(i - 200.0f, 2.0f) + pow(j, 2.0f));
+			arcMatrix[j][i].arc = acos((200.0f - (float)i) / t1) / PI * 180.0f;
+			arcMatrix[j][i].d = t1;
+			//cout << j << ' ' << i << ' ' << arcMatrix[j][i].arc << ' ' << t1<<"   ";
+		}
+		//cout << endl;
+	}
+	int n_theta = 36;
+	for (int t = 0; t < n_theta; t++)
+	{
+		float theta = PI*(float)t / (float)n_theta;
+		Mat oddKernel(17, 17, CV_32F), evenKernel(17, 17, CV_32F);
+		myGaborKernel(theta, oddKernels[t], evenKernels[t]);
+	}
 	visit("C:\\images", computeVpScore);
 
 	/*

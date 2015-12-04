@@ -15,7 +15,7 @@ using namespace cv;
 using namespace std;
 #define PI 3.141592653f
 struct vals{
-	float arc;
+	int arc; //in degree
 	float d;
 };
 vals arcMatrix[200][400];
@@ -158,15 +158,17 @@ Mat computeVpScore(string filePath)
 				gabors[i][j][t] = filtered.at<float>(i, j);
 	}
 	
-	Mat directions(image.rows, image.cols, CV_8U);
+	//Mat directions(image.rows, image.cols, CV_8U);
+	uchar directions[300][300];
 	Mat confidences(image.rows, image.cols, CV_32F);
 	
 	for (int i = 0; i < m; i++)
 		for (int j = 0; j < n; j++)
 		{
 
-			int idx = (float)(max_element(gabors[i][j], gabors[i][j] + n_theta) - gabors[i][j]);
-			directions.at<uchar>(i, j) = (uchar)idx;
+			uchar idx = (float)(max_element(gabors[i][j], gabors[i][j] + n_theta) - gabors[i][j]);
+			//directions.at<uchar>(i, j) = (uchar)idx;
+			directions[i][j] = idx;
 			//float max_resp = gabors[i][j][idx];
 			/*sort(gabors[i][j], gabors[i][j] + n_theta, greater<float>());
 			if (max_resp > 0.5f)
@@ -178,23 +180,25 @@ Mat computeVpScore(string filePath)
 	int thresh = 2.0f * 180.0f / (float)n_theta;
 	int r = (m + n) / 7;
 	float r_dia = sqrtf(m*m + n*n);
+	int gamma, c;
 	for (int i = 0; i < m; i++)
 	{	
 		for (int j = 0; j < n; j++)
 		{
 			scores.at<float>(i, j) = 0;
-			float tmepScore = 0;
+			int tmepScore = 0;
 			for (int i1=i+1; i1 < m && i1<i+40; i1++)
 			{
 				for (int j1=0; j1 < n; j1++)
 				{
-					int c = (float)directions.at<uchar>(i1, j1) / (float)n_theta * 180.0f;
+					//int c = (float)directions.at<uchar>(i1, j1) / (float)n_theta * 180.0f;
+					c = directions[i][j];
 					/*if (c < 5.0f || (85.0f < c && c < 95.0f) || c>175.0f)
 						continue;*/
 					//float d = sqrtf(pow(i - i1, 2.0) + pow(j - j1, 2.0));
 					//float d = arcMatrix[i1-i][j1-j+200].d;
 					//float gamma = acosf(((float)j - (float)j1) / d)/ PI * 180.0f;					
-					int gamma = arcMatrix[i1-i][j1-j+200].arc;
+					gamma = arcMatrix[i1-i][j1-j+200].arc;
 					
 					if (abs(c - gamma) < thresh/* && confidences.at<float>(i1, j1) > 0.35*/)
 					{
